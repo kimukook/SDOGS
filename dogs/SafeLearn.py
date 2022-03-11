@@ -1,5 +1,5 @@
 """
-
+This script computes the safe set and expansion set for SDOGS
 =====================================
 Author  :  Muhan Zhao
 Date    :  Mar. 1, 2022
@@ -32,6 +32,8 @@ SOFTWARE.
 import  numpy           as np
 from    dogs            import Utils
 
+__all__ = ['expansion_identifier', 'safe_expansion_set', 'grid_world', 'grid_points']
+
 # ==================  Update Safe region Psi and Expansion set G  ==================
 
 
@@ -60,9 +62,9 @@ def expansion_identifier(x, safe_inter_query, sdogs):
     expand_sign         = False
     expander_children   = 0
     # Compute the safe rectangular of x with the estimated safe radius
-    single_point, potentially_safe_grid_points = grid_points(x, safe_inter_query, sdogs)
+    safe_init_refine, single_point, potentially_safe_grid_points = grid_points(x, safe_inter_query, sdogs)
 
-    if single_point:
+    if safe_init_refine:
         # First criteria: If the estimated safe radius of the query point is too small,
         # smaller than the current mesh grid, then there is high probability that no unsafe points could
         # be classified as safe even though the query point is evaluated.
@@ -145,7 +147,7 @@ def grid_points(x, y, sdogs):
 
     ----------
     Output
-
+    :return safe_init_refine:       Indicate if safe mesh refinement is needed at the beginning of optimization
     :return single_point        :       N-by-, np.ndarray; If the point x itself is the only safe point in its safe ball
                                         i.e. safe radius of x is less than mesh size
     :return _grid_points   :       n-by-(*), np.ndarray; Return the grid points that are in the ball
@@ -198,26 +200,36 @@ def grid_points(x, y, sdogs):
     _grid_points = Utils.unique_data(_grid_points)
     # transform single_point elements to boolean type, o.w. its float64
     single_point = single_point.astype(bool)
-    return single_point, _grid_points
+    safe_init_refine = True if np.all(single_point) else False
+    return safe_init_refine, single_point, _grid_points
 
 
 def safe_expansion_set(sdogs):
     """
-    Determine the max uncertainty point in the expansion set G_k^mesh. If it doesn't satisfy the criteria following,
-    safe expansion is well-studied enough, turn to surrogate minimization mode.
-    :param sdogs.xE        :   Evaluated data points
-    :param sdogs.y_safe        :   Safety function values
-    :param sdogs.Nm            :   Current mesh size
-    :param sdogs.L_safe        :   Lipschitz continuous constant bound of safety functions
-    :param sdogs.safe_inter_par:   Safety function interpolants
-    :param sdogs.delta     :   Restriction bound on estimated safe radius of points in expansion set, e.g. 0.001.
-    :param sdogs.epsilon   :   Restriction bound on uncertainty values of points in expansion set, e.g. 0.001.
-    :return:
+    Outline
+
+    Determine the safe set Psi and expansion set G. Determine whether or not the safe exploration stage has been
+    exhausted; Also at the beginning of optimization, refine the mesh if needed. With CDC version, also computes the
+    point with the largest value in function P (minimum value in surrogate if it is not unique).
+
+    ----------
+    Parameters
+
+    :param sdogs            :   SafeDogs class object;
+
+    ----------
+    Output
+
+    :return safe_expand_sign:   bool; True if there exists point to be evaluated so that safe set expanded
+    :return safe_set        :   np.ndarray; The grid points that are known to be safe
+    :return expansion_set   :   np.ndarray; The grid points that could potentially expand the safe set
+    :return xhat            :   n-by-1, 2D np.ndarray; The point in the expansion set with the largest value in P
+    :return ehat            :   scalar; The value of uncertainty function at xhat
     """
     # I: Determine the smallest rectangular that includes the safe region.
     # single_point: indicates whether or not each of xE is the only safe point in its safe ball on the current mesh
     # potentially_safe_grid_points: contains all the grid points in the safe rectangular of each of xE
-    sdogs.single_point, potentially_safe_grid_points = grid_points(sdogs.xE, sdogs.yS, sdogs)
+    sdogs.safe_init_refine, sdogs.single_point, potentially_safe_grid_points = grid_points(sdogs.xE, sdogs.yS, sdogs)
 
     # safe_expand_sign: Check if there are points to be expanded as safe at this iteration.
     # safe_expand_sign == True: Safe exploration iteration;
@@ -237,15 +249,13 @@ def safe_expansion_set(sdogs):
     sdogs.expansion_set_uncertainty    = np.empty(shape=[0, ])     # The uncertainty of each point in expansion set
     sdogs.expansion_set_children_count = np.empty(shape=[0, ])     # P_k^ell value of points in expansion set
 
-    if np.all(sdogs.single_point):
+    if sdogs.safe_init_refine:
         # On the current mesh grid, only the initial points are safe, refine the mesh grid
         # TODO fix xhat when initial refinement?
-        sdogs.xhat             = np.copy(sdogs.xE)
+        sdogs.xhat             = None
         sdogs.safe_set         = np.copy(sdogs.xE)
         sdogs.safe_expand_sign = False
-
         sdogs.expansion_set = np.copy(sdogs.xE)
-        sdogs.iter_type = sdogs.iter_type_list[1]
 
     else:
         # The Delaunay simplices for computing the uncertainty function values:

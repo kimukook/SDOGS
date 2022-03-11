@@ -6,7 +6,7 @@ import      os
 import      inspect
 from        dogs            import Utils
 from        dogs            import interpolation
-from        dogs            import constantK_snopt_safelearning
+from        dogs            import constant_snopt_min
 
 '''
  adaptiveK_snopt.py file contains functions used for DeltaDOGS(Lambda) algorithm.
@@ -76,20 +76,20 @@ def triangulation_search_bound_snopt(inter_par, xi, y0, ind_min, y_safe, L_safe,
     Scl = np.zeros([np.shape(tri)[0]])
     Sc_safe = np.zeros(tri.shape[0])
 
-    Rmax, max_dis = constantK_snopt_safelearning.max_circumradius_delauany_simplex(xi, xE, tri)
+    Rmax, max_dis = constant_snopt_min.max_circumradius_delauany_simplex(xi, xE, tri)
     # Determine the parameters b and c for exterior uncertainty function.
-    b, c, status  = constantK_snopt_safelearning.uncertainty_parameter_solver(Rmax, max_dis)
+    b, c, status  = constant_snopt_min.uncertainty_parameter_solver(Rmax, max_dis)
 
     for ii in range(np.shape(tri)[0]):
         R2, xc = Utils.circhyp(xi[:, tri[ii, :]], n)
         if R2 < inf:
             # initialize with body center of each simplex
             x     = np.dot(xi[:, tri[ii, :]], np.ones([n + 1, 1]) / (n + 1))
-            exist = constantK_snopt_safelearning.unevaluated_vertices_identification(xi[:, tri[ii, :]], xE)[0]
+            exist = constant_snopt_min.unevaluated_vertices_identification(xi[:, tri[ii, :]], xE)[0]
             if exist == 0:  # The Delauany simplex considered is safe
                 e = (R2 - np.linalg.norm(x - xc) ** 2)
             else:
-                e = constantK_snopt_safelearning.discrete_min_uncertainty(x, xE, b, c)[0]
+                e = constant_snopt_min.discrete_min_uncertainty(x, xE, b, c)[0]
 
             Sc[ii]      = (interpolation.interpolate_val(x, inter_par) - y0) / e
             Sc_safe[ii] = (Sc[ii] if exist == 0 else inf)
@@ -166,7 +166,7 @@ def adaptivek_search_snopt_min(simplex, inter_par, y0, y_safe, L_safe, b, c, fin
     # Determine if the boundary corner exists in simplex, if boundary corner detected:
     # e(x) = (|| x - x' || + c )^b - c^b,  x' in S^k
     # else, e(x) is the regular uncertainty function.
-    exist, eval_indicators = constantK_snopt_safelearning.unevaluated_vertices_identification(simplex, xE)
+    exist, eval_indicators = constant_snopt_min.unevaluated_vertices_identification(simplex, xE)
 
     R2, xc = Utils.circhyp(simplex, n)
     x = np.dot(simplex, np.ones([n + 1, 1]) / (n + 1))
@@ -306,7 +306,7 @@ def adaptivek_search_cost_snopt(x):
         e = R2 - np.linalg.norm(x - xc) ** 2
         ge = - 2 * (x - xc)
     else:
-        e, ge, gge = constantK_snopt_safelearning.discrete_min_uncertainty(x, inter_par.xi, b, c)
+        e, ge, gge = constant_snopt_min.discrete_min_uncertainty(x, inter_par.xi, b, c)
 
     # denominator = (1e-10 if abs(p-y0) < 1e-10 else p - y0)
     # F[0] = - e / denominator

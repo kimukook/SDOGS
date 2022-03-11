@@ -50,14 +50,14 @@ def summary_display(sdogs):
         np.round(np.linalg.norm(sdogs.xmin - sdogs.xE[:, -1]) / np.linalg.norm(sdogs.xmin) * 100, decimals=4)) + '%'
     cur_val_reltv_err = str(np.round(np.abs(sdogs.yE[-1] - sdogs.y0) / np.abs(sdogs.y0) * 100, decimals=4)) + '%'
 
-    if sdogs.iter_type == 'explore':
+    if sdogs.iter_type == 2:
         iteration_name = 'Safe Exploration'
-    elif sdogs.iter_type == 'exploit':
+    elif sdogs.iter_type == 4:
         iteration_name = 'Exploitation'
-    elif sdogs.iter_type == 'refine':
+    elif sdogs.iter_type == 3 or 5:
         iteration_name = 'Mesh refine iteration'
     else:
-        iteration_name = 'Bug happens!'
+        raise ValueError('Iteration type should be integer 1 to 5. ')
     print('============================   ', iteration_name, '   ============================')
 
     print(' %40s ' % 'No. Iteration', ' %30s ' % sdogs.iter)

@@ -30,31 +30,22 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-import os
-import inspect
-import shutil
-import numpy as np
-from dogs import interpolation
-from dogs import Utils
-# from dogs import constantK_snopt_safelearning
-# from dogs import adaptiveK_snopt_safelearning
-from dogs import cartesian_grid
-# from dogs import SafeDOGSplot
-from dogs import SafeLearn
-from dogs import exterior_uncertainty as extr_uncer
-
+import  os
+import  inspect
+import  numpy           as np
+from    dogs            import Utils
+from    dogs            import exterior_uncertainty
 from    scipy.spatial   import Delaunay
 
-# TODO
-# __all__= []
+__all__ = ['SafeDogs']
 
 
 class SafeDogs:
     """
     Outline
+
     stores the data structure of SDOGS optimization, including the objective & safe function evaluation handle,
     evaluated data and corresponding values, optional parameters
-
     """
     def __init__(self, obj_fun, safe_fun, optionalParams,
                  A, b):
@@ -104,15 +95,15 @@ class SafeDogs:
         #  also, get_lipschitz is lower case in l, it could be misleading
         if callable(safe_fun.get_lipschitz):
             self.safe_Lipschitz = safe_fun.get_lipschitz()
-            self.L_safe = np.max(self.safe_Lipschitz)
+            self.L_safe         = np.max(self.safe_Lipschitz)
         else:
             raise NameError(f"Safe function {self.safe_fname} does not have method 'get_lipschitz'. ")
 
         # Mesh grid info, get the (initial) mesh size
         if optionalParams.get_option('Initial mesh size') is not None:
             # The number of intervals for each dimension
-            self.initial_ms   = optionalParams.get_option('Initial mesh size')
-            self.ms          = optionalParams.get_option('Initial mesh size')
+            self.initial_ms = optionalParams.get_option('Initial mesh size')
+            self.ms         = optionalParams.get_option('Initial mesh size')
         else:
             raise NameError("The keyword 'Initial mesh size' is not defined in SdogsOptions. ")
 
@@ -134,9 +125,10 @@ class SafeDogs:
         self.iter_type = 1
         ''' possible values for iter_type:
         iter_type == 1 -> 'initial'
-        iter_type == 2 -> 'safe_mesh_refinement'
-        iter_type == 3 -> 'exploitation'
-        iter_type == 4 -> 'exploiting_mesh_refinement'''
+        iter_type == 2 -> 'safe exploration'
+        iter_type == 3 -> 'safe_mesh_refinement'
+        iter_type == 4 -> 'exploitation'
+        iter_type == 5 -> 'exploiting_mesh_refinement'''
 
         # define the maximum number of iteration of optimization
         if optionalParams.get_option('Maximum iteration') is not None:
@@ -175,6 +167,7 @@ class SafeDogs:
         # Parameters generated for expansion set and safe set
         self.safe_expand_sign = None
         self.single_point     = None
+        self.safe_init_refine = None
         self.xhat             = None    # potential maximizer of function P (paper) in the expansion set
         self.ehat             = None    # the uncertainty function value e corresponding to xhat
         self.safe_set         = None
@@ -268,16 +261,14 @@ class SafeDogs:
 
         # No matter you call self.current_path in an example script, or in the debug mode, it all returns SDOGS/dogs
         self.current_path = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+
+        self.plot_folder  = os.path.join(os.path.dirname(self.current_path), 'images')
+        self.snopt_folder = os.path.join(os.path.dirname(self.current_path), 'snopt_info')
         # generate the images folder under SDOGS
-        self.plot_folder = os.path.join(os.path.dirname(self.current_path), 'images')
-        if os.path.isdir(self.plot_folder):
-            files = os.listdir(self.plot_folder)
-            png_files = [file for file in files if file.endswith(".png")]
-            for file in png_files:
-                path_to_file = os.path.join(self.plot_folder, file)
-                os.remove(path_to_file)
-        else:
-            os.makedirs(self.plot_folder)
+        self.init_folder(self.plot_folder, '.png')
+        # generate the snopt folder under SDOGS
+        self.init_folder(self.snopt_folder, '.mat')
+
         # TODO delete this?
         self.func_path = None
 
@@ -390,9 +381,9 @@ class SafeDogs:
             self.tri = np.copy(tri[keep])
 
     def update_exterior_uncertainty(self):
-        self.Rmax, self.max_dis = extr_uncer.max_circumradius_delaunay_simplex(self)
+        self.Rmax, self.max_dis = exterior_uncertainty.max_circumradius_delaunay_simplex(self)
         # Determine the parameters b and c for exterior uncertainty function.
-        self.b, self.c, status = extr_uncer.exterior_uncertainty_parameter_solver(self.Rmax, self.max_dis)
+        self.b, self.c, status = exterior_uncertainty.exterior_uncertainty_parameter_solver(self.Rmax, self.max_dis)
 
     def uncertainty_eval(self, query):
         """
@@ -413,9 +404,9 @@ class SafeDogs:
         else:
             simplex = self.xi[:, np.argsort(np.linalg.norm(query - self.xi, axis=0))[:2]]
 
-        unevaluated_exist, evaluated_indices = extr_uncer.unevaluated_vertices_identification(simplex, self.xE)
+        unevaluated_exist, evaluated_indices = exterior_uncertainty.unevaluated_vertices_identification(simplex, self.xE)
         if unevaluated_exist:
-            e = extr_uncer.exterior_uncertainty(query, self)[0]
+            e = exterior_uncertainty.exterior_uncertainty_eval(query, self.xE, self.b, self.c)[0]
         else:
             R2, xc = Utils.circhyp(simplex, self.n)
             e = (R2 - np.linalg.norm(query - xc) ** 2)
@@ -514,6 +505,17 @@ class SafeDogs:
         # TODO vectorize shat, is this correct?
         shat = np.min(y, axis=0) - self.L_safe * np.linalg.norm(query - x)
         return shat
+
+    @staticmethod
+    def init_folder(folder_name, file_type):
+        if os.path.isdir(folder_name):
+            files = os.listdir(folder_name)
+            specific_files = [file for file in files if file.endswith(file_type)]
+            for file in specific_files:
+                path_to_file = os.path.join(folder_name, file)
+                os.remove(path_to_file)
+        else:
+            os.makedirs(folder_name)
 
     # TODO journal version get safe radius and estimate
     # def get_safe_radius_journal(self, x, y):

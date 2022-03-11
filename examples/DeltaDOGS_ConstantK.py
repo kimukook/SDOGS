@@ -7,8 +7,7 @@ import numpy as np
 from functools import partial
 from dogs import interpolation
 from dogs import Utils
-from dogs import constantK_snopt_safelearning
-from dogs import cartesian_grid
+from dogs import constant_snopt_min
 from dogs import plotting
 from dogs import SafeLearn
 
@@ -117,7 +116,7 @@ for ff in range(nff):
             elif not SinglePoint:
                 # current evaluate point is the min surrogate model
                 xi, ind_min = cartesian_grid.add_sup(xE, xU, ind_min)
-                xc, yc, result, safe_estimate = constantK_snopt_safelearning.triangulation_search_bound_snopt(inter_par, xi, K, ind_min, y_safe, L_safe)
+                xc, yc, result, safe_estimate = constant_snopt_min.triangulation_search_bound_snopt(inter_par, xi, K, ind_min, y_safe, L_safe)
 
                 xc_eval = Utils.safe_mesh_quantizer(xc, Nm, xE, y_safe, L_safe)
 

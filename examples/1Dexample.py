@@ -6,12 +6,13 @@ from dogs import OptionalParams
 from dogs import safedogs
 from dogs import SafeLearn
 from dogs import plotting
-from dogs import constantK_snopt_safelearning
+from dogs import constant_snopt_min
 from dogs import Utils
 
 from TestFuncs import schwefel
 from TestFuncs import sine
 import matplotlib.pyplot as plt
+
 
 # only print 4 digits
 float_formatter = lambda x: "%.4f" % x
@@ -48,13 +49,6 @@ Bin = np.concatenate((np.ones((n, 1)), np.zeros((n, 1))), axis=0)
 
 sdogs = safedogs.SafeDogs(fun, safe_fun, options, Ain, Bin)
 
-
-
-x = np.array([[.375, .625], [.25, .5]]).T
-y = np.array([[4.5, 4.5], [4.5, 4.5]]).T
-# x = np.array([[.375, .625]]).T
-# y = np.array([[4.5, 4.5]]).T
-
 num_iter = 0
 
 # for kk in range(sdogs.mesh_refine):
@@ -86,36 +80,41 @@ SafeLearn.safe_expansion_set(sdogs)
 # each level of grid size.
 if sdogs.safe_expand_sign:
     # safe exploration stage: current evaluate point is the max P (with min surrogate value if not unique) in the expansion set
+    sdogs.iter_type = 2
     xc_eval = np.copy(sdogs.xhat)
-elif not sdogs.single_point:
+
+elif not sdogs.safe_init_refine:
+    sdogs.iter_type = 4
     # expansion set empty, and not single safe point
     # exploitation stage: current evaluate point is the min surrogate model
-    xc, yc, result, safe_estimate = constantK_snopt_safelearning.triangulation_search_bound_snopt(sdogs)
+    constant_snopt_min.triangulation_search_bound_snopt(sdogs)
     # TODO fix safe_mesh_quantizer
     xc_eval = Utils.safe_mesh_quantizer(sdogs)
 
 else:
-    # TODO When could this condition happen?
-    xc_eval = np.zeros((sdogs.n, 1))
+    # safe mesh refinement invoked at the initial stage of optimization
+    xc_eval = None
     pass
 
-if Utils.mindis(xc_eval, sdogs.xE)[0] < 1e-6 or sdogs.single_point:
-    # TODO fix mesh refine step in safedogs: ms*=2, mesh_size update, K update
-    Nm *= 2
-    delta = 1 / Nm
-    if not safe_expand_sign:
-        # If this mesh refinement is incurred by safe exploration, do not increase K
-        K *= 3
-    print('===============  MESH Refinement  ===================')
-    summary = {'alg': 'SafeLearn', 'xc_grid': xc_eval, 'xmin': xmin, 'Nm': Nm, 'y0': y0}
-    plotting.print_summary(num_iter, k, kk, xE, yE, summary, 1)
-else:
-    xE = np.hstack((xE, xc_eval))
-    yE = np.hstack((yE, func_eval(xc_eval)))
-    y_safe = np.hstack((y_safe, safe_eval(xc_eval)))
+sdogs.iter += 1
 
-    summary = {'alg': 'ori', 'xc_grid': xc_eval, 'xmin': xmin, 'Nm': Nm, 'y0': y0}
-    plotting.print_summary(num_iter, k, kk, xE, yE, summary)
+if Utils.mindis(xc_eval, sdogs.xE)[0] < 1e-6 or sdogs.single_point:
+    sdogs.iter_type = 3
+    # TODO fix mesh refine step in safedogs class? ms*=2, mesh_size update, K update
+    sdogs.ms *= 2
+    sdogs.mesh_size = 1 / sdogs.ms
+    if not sdogs.single_point:
+        sdogs.iter_type = 5
+        # Mesh refinement is invoked by exploitation, increase K
+        K *= 3
+
+else:
+    # TODO fix function evaluation in safedogs class?
+    xE = np.hstack((sdogs.xE, xc_eval))
+    yE = np.hstack((sdogs.yE, sdogs.func_eval(xc_eval)))
+    y_safe = np.hstack((sdogs.yS, sdogs.safe_eval(xc_eval)))
+
+plotting.summary_display(sdogs)
 
 # import imp
 # imp.reload(plotting)

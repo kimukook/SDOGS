@@ -173,7 +173,7 @@ def exterior_uncertainty_parameter_solver(Rmax, max_dis):
     return b, c, status
 
 
-def exterior_uncertainty(x, sdogs):
+def exterior_uncertainty_eval(x, xE, b, c):
     """
     Outline
 
@@ -183,8 +183,10 @@ def exterior_uncertainty(x, sdogs):
     ---------
     Parameters
 
-    :param x    :   n-by-1 2D array, np.ndarray; The query point
-    :param sdogs:   SafeDogs class object;
+    :param x    :   n-by-1 2D np.ndarray; The query point
+    :param xE   :   n-by-(*) 2D np.ndarray; The evaluated data points
+    :param b    :   scalar; Exterior uncertainty function parameter;
+    :param c    :   scalar; Exterior uncertainty function parameter;
 
     ---------
     Output
@@ -194,17 +196,18 @@ def exterior_uncertainty(x, sdogs):
     :return h:  n-by-n 2D array, np.ndarray; The hessian of exterior uncertainty function at query
     """
     x = x.reshape(-1, 1)
-    assert sdogs.xE.shape[1] >= 1, 'Evaluated data set xE should have more than 1 data point'
-    assert x.shape[0] == sdogs.xE.shape[0], 'x has different dimensions with xE.'
+    n = x.shape[0]
+    assert xE.shape[1] >= 1, 'Evaluated data set xE should have more than 1 data point'
+    assert x.shape[0] == xE.shape[0], 'x has different dimensions with xE.'
 
-    dis, idx, x_nn = Utils.mindis(x, sdogs.xE)
+    dis, idx, x_nn = Utils.mindis(x, xE)
     dis = (1e-10 if dis < 1e-10 else dis)
 
-    f = (dis + sdogs.c) ** sdogs.b - sdogs.c ** sdogs.b
+    f = (dis + c) ** b - c ** b
     f = np.atleast_1d(f)  # Must be an array, in case of future concatenation and other matrix operations
-    g = sdogs.b * (dis + sdogs.c) ** (sdogs.b - 1) * (x - x_nn) / dis
-    h = sdogs.b * (sdogs.b - 1) * (dis + sdogs.c) ** (sdogs.b - 2) * np.dot((x - x_nn), (x - x_nn).T) / dis ** 2 \
-        + sdogs.b * (dis + sdogs.c) ** (sdogs.b - 1) * np.identity(sdogs.n) / dis \
-        - sdogs.b * (dis + sdogs.c) ** (sdogs.b - 1) * np.dot((x - x_nn), (x - x_nn).T) / dis ** 3
+    g = b * (dis + c) ** (b - 1) * (x - x_nn) / dis
+    h = b * (b - 1) * (dis + c) ** (b - 2) * np.dot((x - x_nn), (x - x_nn).T) / dis ** 2 \
+        + b * (dis + c) ** (b - 1) * np.identity(n) / dis \
+        - b * (dis + c) ** (b - 1) * np.dot((x - x_nn), (x - x_nn).T) / dis ** 3
     return f, g, h
 
