@@ -1,7 +1,7 @@
 import  os
 import  inspect
 import  numpy         as np
-import  scipy.io        as io
+import  scipy.io      as io
 from    dogs          import Utils
 from    dogs          import SafeLearn
 from    dogs          import plotting
@@ -32,90 +32,6 @@ from    optimize      import snopta, SNOPT_options
      AdaptiveK_search_cost:       Calculate the value of continuous search function.
 '''
 ##################################  Constant K search SNOPT ###################################
-
-
-# TODO to be deleted! surrogate_eval inside safedogs now
-def surrogate_eval(sdogs, x):
-    x = x.reshape(-1, 1)
-    e = sdogs.surrogate_eval(sdogs, x)
-    f = sdogs.inter_par.inter_val(x) - sdogs.K * e
-    return f
-
-
-# TODO constant_surrogate_solver to be deleted. too cumbersome
-def constant_surrogate_solver(sdogs):
-    sdogs.iter += 1
-    # Update the interpolation for f(x) and psi(x)
-    sdogs.inter_par = interpolation.InterParams(sdogs.xE)
-    sdogs.yp = sdogs.inter_par.interpolateparameterization(sdogs.yE)
-
-    sdogs.safe_inter = interpolation.SafeInterParams(sdogs.xE, sdogs.yS)
-    sdogs.yp_safe = sdogs.safe_inter.update()
-
-    # local minimizer of interpolation yp
-    sdogs.ind_min = np.argmin(sdogs.yp)
-
-    # Update the Delaunay triangulation
-    sdogs.xi, ind_min = Utils.add_sup(sdogs)
-    SafeLearn.delaunay_triangulation(sdogs)
-
-    # Calculate the parameters b & c for fractional uncertainty function
-    SafeLearn.fractional_uncertainty_parameter(sdogs)
-
-    # Update the safe region and expansion set
-    # note that expansion set depends both on mesh size and iterations
-    sdogs.safe_radius = np.min(sdogs.yS, axis=0) / sdogs.L_safe
-    SafeLearn.safe_expansion_set(sdogs)
-    # Calculate the Rmax and max_dis, b & c for new uncertainty function
-
-    # At the beginning, focus on exploration. As the algorithm proceeds, turn into exploitation mode.
-    # If the exploitation fails, expand the safe region.
-    if sdogs.SinglePoint:
-        sdogs.iter_type = 'refine'
-        # xhat should be the very first safe initial at this case
-        sdogs.xc = np.copy(sdogs.xhat)
-        pass
-    else:
-        if sdogs.safe_expand_sign:  # If there is point inside expansion set, then trigger safe exploration.
-            # - Previously, the point to evaluate is the max uncertainty in expansion set
-            #   Now, the point to evaluate is the point that could possibly expand the most number
-            #   of unsafe points in the expansion set
-            # - Two circumstances that safe_expand_sign fails:
-            #   1: SinglePoint occurred, then refine the mesh grid;
-            #   2: expansion set has been exhausted.
-            sdogs.xc = np.copy(sdogs.xhat)
-            sdogs.iter_type = 'explore'
-            # SafeDOGSplot.safe_contour_uncertainty_2Dplot(xE, safe_eval, y_safe, L_safe, Nm)
-
-            # If xc_eval discovered by expansion set is close to evaluated data points,
-            # This should not happen since uncertainty of xc should be bigger than epsilon. Thus, decrease epsilon
-        else:
-            xc, yc, result, safe_estimate = triangulation_search_bound_snopt(sdogs, ind_min)
-            print(xc)
-            sdogs.xc = Utils.safe_mesh_quantizer(sdogs, xc)
-            print(sdogs.xc)
-            sdogs.iter_type = 'exploit'
-    sdogs.plot_func(sdogs)
-
-    if Utils.mindis(sdogs.xc, sdogs.xE)[0] < 1e-6 or sdogs.SinglePoint:
-        # 1. xc already evaluated, mesh refine.
-        # 2. Only one single point exists in the safe set, mesh too coarse, refine the mesh.
-        sdogs.iter_type = 'refine'
-        sdogs.ms *= 2
-        sdogs.delta = 1 / sdogs.ms
-        sdogs.mesh_size = 1 / sdogs.ms
-        # if not sdogs.safe_expand_sign:
-        if not sdogs.SinglePoint:
-            # If this mesh refinement is incurred by safe exploration, do not increase K
-            sdogs.K *= 3
-        print('after mesh refine')
-        print(sdogs.xc)
-        print('=====')
-    else:
-        sdogs.xE = np.hstack((sdogs.xE, sdogs.xc))
-        sdogs.yE = np.hstack((sdogs.yE, sdogs.func_eval(sdogs.xc)))
-        sdogs.yS = np.hstack((sdogs.yS, sdogs.safe_eval(sdogs.xc)))
-    plotting.summary_display(sdogs)
 
 
 def triangulation_search_bound_snopt(sdogs):
@@ -168,9 +84,9 @@ def triangulation_search_bound_snopt(sdogs):
             Sc[ii]      = inf
 
     # 2: Determine the minimizer of continuous search function at those 3 Delaunay simplices.
-    # optm_result == 1: Global one, the simplex that has minimum value of Sc at circumcenters, might be unsafe
-    # optm_result == 2: Global one within the safe region.
-    # optm_result == 3: Local and might be unsafe
+    # optm_result == 0: Global one, the simplex that has minimum value of Sc at circumcenters, might be unsafe
+    # optm_result == 1: Global one within the safe region.
+    # optm_result == 2: Local and might be unsafe
     index               = np.array([np.argmin(Sc), np.argmin(Sc_safe), np.argmin(Scl)])
     xm                  = np.zeros((sdogs.n, 3))
     ym                  = np.zeros(3)
@@ -226,7 +142,6 @@ def constant_search_snopt(simplex, sdogs):
     lb_simplex = np.min(simplex, axis=1)
     ub_simplex = np.max(simplex, axis=1)
 
-    m = sdogs.n + 1
     nL = sdogs.n + 1  # The number of constraints which is determined by the number of simplex boundaries.
     assert nL == A_simplex.shape[0], 'The No. of simplex constraints is wrong'
 
@@ -237,7 +152,7 @@ def constant_search_snopt(simplex, sdogs):
     # solve for constrained minimization of safe learning within each open ball of the vertices of the query simplex.
     # Then choose the one with the minimum continuous function value.
     x_solver = np.empty(shape=[sdogs.n, 0])
-    y_solver = np.empty(shape=[1, ])
+    y_solver = np.empty(shape=[0, ])
 
     for i in range(sdogs.n + 1):
         # In n-dimensional simplex, there are n+1 vertices, for each of these vertices, there is a ball such that
@@ -254,6 +169,9 @@ def constant_search_snopt(simplex, sdogs):
         else:
             # Notice that the safety functions are transformed due to the difficulties in the numerical computation.
             safe_bounds = sdogs.yS[:, idx] ** 2
+            # define the lower and upper bounds of decision variables x, to be the smallest box domain that contains simplex
+            xlow = np.copy(lb_simplex)
+            xupp = np.copy(ub_simplex)
 
             if sdogs.n > 1 and unique_eval_vertex == 0:
                 # The First part of F(x) is the objective function.
@@ -267,13 +185,8 @@ def constant_search_snopt(simplex, sdogs):
                 n_other_eval_v = len(other_eval_vertices_index)
                 nF = 1 + nL + sdogs.m + n_other_eval_v
 
-                # TODO debug this
                 Flow = np.hstack((-inf, b_simplex.T[0], np.zeros(sdogs.m), np.zeros(n_other_eval_v)))
                 Fupp = np.hstack((inf * np.ones(1 + sdogs.n + 1), safe_bounds, inf * np.ones(n_other_eval_v)))
-
-                # The lower and upper bounds of variables x.
-                xlow = np.copy(lb_simplex)
-                xupp = np.copy(ub_simplex)
 
                 # First part: since constant K surrogate using p(x) - K * e(x), the objective function is nonlinear.
                 # Second part: The simplex constraints are generated by simplex bounds, all linear.
@@ -290,22 +203,20 @@ def constant_search_snopt(simplex, sdogs):
 
             elif sdogs.n > 1 and unique_eval_vertex == 1:
                 # For higher-dimensional problem, if there is only one evaluated vertex of such vertex,
-                # then we don't need to bound the nearest point in such simplex.
+                # we don't need to bound the nearest point in such simplex.
 
                 # The First part of F(x) is the objective function.
                 # The second part of F(x) is the simplex bounds.
                 # The third part of functions in F(x) is the safe constraints.
                 # In high dimension, A_simplex make sure that linear_derivative_A won't be all zero.
 
-                nF = 1 + m + sdogs.M
+                nF = 1 + nL + sdogs.m
 
-                Flow = np.hstack((-inf, b_simplex.T[0], -safe_bounds))
-                Fupp = inf * np.ones(nF)
-                xlow = np.copy(lb_simplex)
-                xupp = np.copy(ub_simplex)
+                Flow = np.hstack((-inf, b_simplex.T[0], np.zeros(sdogs.m)))
+                Fupp = np.hstack((inf * np.ones(1 + nL), safe_bounds))
 
-                linear_derivative_A    = np.vstack((np.zeros((1, sdogs.n)), A_simplex, np.zeros((sdogs.M, sdogs.n))))
-                nonlinear_derivative_G = np.vstack((2 * np.ones((1, sdogs.n)), np.zeros((m, sdogs.n)), 2 * np.ones((sdogs.M, sdogs.n))))
+                linear_derivative_A    = np.vstack((np.zeros((1, sdogs.n)), A_simplex, np.zeros((sdogs.m, sdogs.n))))
+                nonlinear_derivative_G = np.vstack((2 * np.ones((1, sdogs.n)), np.zeros((nL, sdogs.n)), 2 * np.ones((sdogs.m, sdogs.n))))
 
             else:  # n = 1
 
@@ -318,11 +229,9 @@ def constant_search_snopt(simplex, sdogs):
                 # The safety function is L2 norm, nonlinear
                 # The auxiliary function is linear.
 
-                nF = 1 + sdogs.M + 1
-                Flow = np.hstack((-inf, -safe_bounds, -inf))
-                Fupp = inf * np.ones(nF)
-                xlow = np.copy(lb_simplex)
-                xupp = np.copy(ub_simplex)
+                nF = 1 + sdogs.m + 1
+                Flow = np.hstack((-inf, np.zeros(sdogs.m), -inf))
+                Fupp = np.hstack((inf, safe_bounds, inf))
 
                 linear_derivative_A    = np.vstack((np.zeros((1 + sdogs.M, sdogs.n)), np.ones((1, sdogs.n))))
                 nonlinear_derivative_G = np.vstack((2 * np.ones((1 + sdogs.M, sdogs.n)), np.zeros((1, sdogs.n))))
@@ -341,7 +250,7 @@ def constant_search_snopt(simplex, sdogs):
             options.setOption('Solution print', False)
             options.setOption('Infinite bound', inf)
             options.setOption('Verify level', 3)
-            options.setOption('Verbose', False)
+            options.setOption('Verbose', True)
             options.setOption('Print level', -1)
             options.setOption('Scale option', 2)
             options.setOption('Print frequency', -1)
@@ -356,10 +265,10 @@ def constant_search_snopt(simplex, sdogs):
             x_solver = np.hstack((x_solver, result.x.reshape(-1, 1)))
             y_solver = np.hstack((y_solver, result.objective))
 
-    y = np.min(y_solver)
-    x = x_solver[:, np.argmin(y_solver)].reshape(-1, 1)
+    yc = np.min(y_solver)
+    xc = x_solver[:, np.argmin(y_solver)].reshape(-1, 1)
 
-    return x, y
+    return xc, yc
 
 
 def folder_path():
@@ -457,7 +366,7 @@ def constant_search_cost_snopt(x):
 
         # M safety functions
         # Notice that SNOPT use c(x) >= 0, then transform it with negative sign
-        # [psi(vertex)]^2 >= L_safe^2 * || x - vertex ||^2_2 >= -inf
+        # [psi(vertex)]^2 >= L_safe^2 * || x - vertex ||^2_2 >= 0
         F[1 + (n + 1) : 1 + (n + 1) + m] = L_safe**2 * norm2_difference * np.ones(m)
 
         exist, eval_indicators = exterior_uncertainty.unevaluated_vertices_identification(simplex, inter_par.xi)
