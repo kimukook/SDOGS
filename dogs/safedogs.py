@@ -117,7 +117,7 @@ class SafeDogs:
         self.mesh_size = 1 / self.ms
         self.epsilon   = 1e-4
 
-        self.max_mesh          = self.ms * 2 ** self.mesh_refine
+        self.max_mesh  = self.ms * 2 ** self.mesh_refine
         # self.current_mesh_size = np.min(self.ub-self.lb) / self.ms
 
         # Iteration info
@@ -154,6 +154,7 @@ class SafeDogs:
 
         self.safe_estimate_fun = None
         self.safe_radius_fun = None
+
         # TODO fix me
         # if optionalParams.get_option('Safe radius estimate CDC version'):
         #     self.safe_estimate_fun = self.
@@ -198,51 +199,55 @@ class SafeDogs:
         if self.adaptiveK_surrogate:
             raise ValueError("Currently 'Adaptive surrogate' is not well-defined for SDOGS optimization. ")
 
-        # TODO fix those 3
-        # self.solver_type = optionalParams.get_option('')
-        # self.surrogate_type = surrogate_type
+        if optionalParams.get_option('Optimization solver') == 'snopt':
+            self.solver_type = 'snopt'
+        else:
+            raise NameError('SDOGS currently rely on SNOPT to solve the nonlinear constrained minimization problem, '
+                            'please install SNOPT first. ')
+
+        # TODO fix the surrogate solver
         # self.surrogate_solver, self.surrogate_eval = self.solver_generator(y0, K)
 
         # initialization of the data set
-        self.xE = np.copy(self.x0)
-        self.yE = np.zeros(self.xE.shape[1])
-        self.yS = np.empty(shape=[self.m, 0])
+        self.xE        = np.copy(self.x0)
+        self.yE        = np.zeros(self.xE.shape[1])
+        self.yS        = np.empty(shape=[self.m, 0])
 
         # TODO I think we could also do a vector input for function evaluation handle,
         #  but this is not that important, cuz every iteration we only have 1 data point to be evaluated
         for i in range(self.xE.shape[1]):
             self.yE[i] = self.func_eval(self.xE[:, i])
-            self.yS = np.hstack((self.yS, self.safe_eval(self.xE[:, i])))
+            self.yS    = np.hstack((self.yS, self.safe_eval(self.xE[:, i])))
         # At the beginning of each iteration of the main script, will call SafeLearn.delaunay_triangulation
         # there will also concatenate xU and xE
-        self.xi = np.hstack((self.xU, self.xE))
+        self.xi        = np.hstack((self.xU, self.xE))
 
         # Define the interpolation for f(x)
-        self.inter_par = None
-        self.yp = None
+        self.inter_par      = None
+        self.yp             = None
         # Store the local minimizer index of yp
-        self.yp_min_ind = None
-        self.x_yp_min = None
+        self.yp_min_ind     = None
+        self.x_yp_min       = None
 
         # Define the interpolation for psi(x)
         self.safe_inter_par = None
-        self.yp_safe = None
+        self.yp_safe        = None
 
         # Define the safe radius for each evaluated data points
-        self.safe_radius = None
+        self.safe_radius    = None
 
         '''Define the minimizer of continuous search function, parameter to be evaluated xc, and its corresponding
         search function value yc, which is the optimization result from (global/local/safe)
         and the estimated safe conditions at xc.'''
-        self.xc = None
-        self.yc = None
-        self.optm_result   = None
+        self.xc             = None
+        self.yc             = None
+        self.optm_result    = None
         '''optm_result: indicate the xc is the minimizer of the surrogate inside which type of simplex 
         1 -> global simplex
         2 -> global and safe simplex
         3 -> local simplex
         '''
-        self.xc_safe_est = None    # the safe estimate at xc
+        self.xc_safe_est    = None    # the safe estimate at xc
 
         '''
         The following is about the Plotting part, put the plot part at the last section in __init__ function.
@@ -262,15 +267,12 @@ class SafeDogs:
         # No matter you call self.current_path in an example script, or in the debug mode, it all returns SDOGS/dogs
         self.current_path = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 
-        self.plot_folder  = os.path.join(os.path.dirname(self.current_path), 'images')
-        self.snopt_folder = os.path.join(os.path.dirname(self.current_path), 'snopt_info')
+        self.plot_folder  = os.path.join(os.path.dirname(self.current_path), 'images')  # the folder containing plots
+        self.snopt_folder = os.path.join(os.path.dirname(self.current_path), 'snopt_info')  # the folder containing snopt optimization infos
         # generate the images folder under SDOGS
         self.init_folder(self.plot_folder, '.png')
         # generate the snopt folder under SDOGS
         self.init_folder(self.snopt_folder, '.mat')
-
-        # TODO delete this?
-        self.func_path = None
 
         # TODO fix plot
         # self.plot_initialize()
@@ -298,47 +300,6 @@ class SafeDogs:
         # Generate the plot of test function
         # TODO fix plot! define them in another class object, dont mess it with SafeDogs, here only data structure
         # self.initial_visual_plot1D()
-
-
-        # TODO I think test_func & safe_func part are done, safe delete them once you believe this
-        # Define the test function index number
-        # self.test_func_index = test_func_info['test_func_index']
-        # self.safe_func_index = test_func_info['safe_func_index']
-        # if test_func_info['type'] == 'test':
-        #     # Define the physical bounds for objective function and safety functions
-        #     self.physical_ub = None
-        #     self.physical_lb = None
-        #     # Define the dimension of safety functions
-        #     self.M = None
-        #     # Define the safe initial point
-        #     self.x0 = None
-        #     # Initialize the test function info, global minimizer 'xmin', target value 'y0', function name 'fname'
-        #     # AND: The upper bound of Lipschitz constant for Safety functions.
-        #     self.xmin = None
-        #     self.y0 = None
-        #     self.fname = None
-        #     self.safe_name = None
-        #     self.L_safe = None
-        #
-        # else:
-        #     # ==================
-        #     # UNDER PERPARATION!
-        #     # ==================
-        #     # Physical bounds of parameter space
-        #     self.physical_ub = test_func_info['physical_ub']
-        #     self.physical_lb = test_func_info['physical_lb']
-        #     # Define the dimension of safety functions
-        #     self.M = test_func_info['M']
-        #     # Define the safe initial point
-        #     self.x0 = test_func_info['x0']
-        #     # Initialize the test function info, global minimizer 'xmin', target value 'y0', function name 'fname'
-        #     # AND: The upper bound of Lipschitz constant for Safety functions.
-        #     self.xmin = test_func_info['xmin']
-        #     self.y0 = test_func_info['y0']
-        #     self.fname = test_func_info['fname']
-        #     self.safe_name = test_func_info['safe_name']
-        #     self.L_safe = test_func_info['L_safe']
-
 
     def update_delaunay_triangulation(self):
         """
@@ -491,6 +452,7 @@ class SafeDogs:
         :param query:   n-by-(*), 2D np.ndarray; The query point
         :param x    :   n-by-(*), 2D np.ndarray;
         :param y    :   m-by-(*), 2D np.ndarray; The safety function values, or its interpolant, at x.
+
         ----------
         Outputs
 
@@ -505,6 +467,72 @@ class SafeDogs:
         # TODO vectorize shat, is this correct?
         shat = np.min(y, axis=0) - self.L_safe * np.linalg.norm(query - x)
         return shat
+
+    def safe_mesh_quantizer(self, xc):
+        """
+        Outline
+
+        Compute the safe quantizer of xc onto the current mesh. Loop starting from the smallest grid intervals that
+        contains the query point xc, iteratively increasing the number of intervals by 2 with each dimension.
+        ----------
+        Parameters
+
+        :param xc       :   The minimizer of the surrogate model
+
+        ----------
+        Outputs
+
+        :return xc_grid :   The safe and minimizer of the surrogate model of quantized query point xc.
+        """
+        assert xc.shape[0] == self.n, "Query points xc in function 'safe_mesh_quantizer' should have n as the first dimension. "
+        iter_max = int(self.ms / 2)
+        # generate the unit Cartesian grid points
+        unit_grid = np.linspace(0, 1, self.ms + 1)
+
+        # initialize
+        xc_grid = None
+        val = 1e+20
+        success = 0
+
+        while xc_grid is None:
+            # xc_grid has still not found yet
+            for ii in range(iter_max):
+                # the number of intervals from the smallest to the larest, for each coordination
+                num_intervals = int(2 * (ii + 1))
+
+                # find the grid points on the unit_grid with the current number of intervals
+                # No need to clip, find the nearest grid points with the given num_intervals;
+                # the query xc need not to be the center of the grid point block
+                current_unit_grid_idx = [np.argsort(abs(xc_coordinate - unit_grid))[:num_intervals] for xc_coordinate in xc]
+                current_boundary_points = np.empty(shape=[self.n, 0])
+
+                tmp = [unit_grid[idx] for idx in current_unit_grid_idx]
+                for jj in range(self.n):
+                    tmp[jj] = np.hstack((np.min(tmp[jj]), np.max(tmp[jj])))
+                    rows = [x.ravel() for x in np.meshgrid(*tmp, indexing='ij')]
+                    current_boundary_points = np.hstack((current_boundary_points, np.row_stack(rows)))
+
+                # compute the unique boundary grid points with the current num_intervals level
+                current_boundary_points = np.unique([tuple(row) for row in current_boundary_points], axis=0)
+
+                # loop over boundary points, find the one that is safe and minimize the surrogate model
+                for kk in range(current_boundary_points.shape[1]):
+                    query = np.copy(current_boundary_points[:, kk].reshape(-1, 1))
+                    safe_criteria = np.min(self.yS, axis=0) - self.L_safe * np.linalg.norm(self.xE - query, axis=0)
+                    if np.any(safe_criteria) > 0:
+                        query_surrogate_value = self.surrogate_eval(query)
+                        if query_surrogate_value < val:
+                            val = query_surrogate_value
+                            xc_grid = np.copy(query)
+                            success = 1
+                        else:
+                            pass
+                    else:
+                        pass
+            if ii == iter_max - 1 and xc_grid is None:
+                print('No safe quantized point of xc is available. ')
+        return xc_grid, success
+
 
     @staticmethod
     def init_folder(folder_name, file_type):
@@ -522,15 +550,7 @@ class SafeDogs:
 
     # def get_safe_estimate_journal(self, x, y):
 
-    # TODO safe delete the test_func once you believe we dont need this anymore
-    # def test_func(self):
-    #     fun, self.physical_lb, self.physical_ub, self.y0, self.xmin, self.fname = Utils.test_fun(self.test_func_index, self.n)
-    #     self.func_eval = partial(Utils.fun_eval, fun, self.physical_ub, self.physical_ub)
-    #     safe_fun, self.x0, self.L_safe, self.M, self.safe_name = Utils.test_safe_fun(self.safe_func_index, self.n)
-    #     self.safe_eval = partial(Utils.fun_eval, safe_fun, self.physical_lb, self.physical_ub)
-    #     return self.func_eval, self.safe_eval
-
-    # TODO We need another class that defines the optimization process, here SafeDogs is only about the data structure
+    # TODO We need another class that defines the optimization process, here SafeDogs only contains data structure
     # def sdogs_optimizer(self):
     #     '''
     #     Main optimization function of S-DOGS.
@@ -545,25 +565,6 @@ class SafeDogs:
     #             else:
     #                 pass
     #     SafeDOGSplot.summary(self)
-
-    # def solver_generator(self, y0, K):
-    #     if self.surrogate_type == 'constant':
-    #         self.K = K
-    #         self.surrogate_solver = constantK_snopt_safelearning.constant_surrogate_solver
-    #         self.surrgate_eval = constantK_snopt_safelearning.surrogate_eval
-    #     else:
-    #         self.y0 = y0
-    #         # self.surrogate_solver = adaptiveK_snopt_safelearning.adaptiveK_surrogate_solver
-    #         # self.surrgate_eval = adaptiveK_snopt_safelearning.surrogate_eval
-    #     return self.surrogate_solver, self.surrgate_eval
-    #
-    # def folder_path(self):
-    #     '''
-    #     Determine the folder path
-    #     :return:
-    #     '''
-    #     self.current_path = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-    #     self.plot_folder = self.current_path + "/plot"
     #
     # def plot_initialize(self):
     #     '''
@@ -577,26 +578,4 @@ class SafeDogs:
     #
     # def initial_visual_plot1D(self):
     #     self.plot_func(self)
-    #
-    # def remove_optimize_file(self):
-    #     if self.surrogate_type == 'constant':
-    #         file_path = self.current_path + '/opt_info_ck.mat'
-    #     else:
-    #         file_path = self.current_path + '/opt_info_ak.mat'
-    #     os.remove(file_path)
 
-
-if __name__ == '__main__':
-    # TODO rework this
-    n = 2
-    surrogate_ = 'constant'
-    solver_ = 'snopt'
-    Nm = 8
-    MESH = 4
-    Ain = np.concatenate((np.identity(n), -np.identity(n)), axis=0)
-    Bin = np.concatenate((np.ones((n, 1)), np.zeros((n, 1))), axis=0)
-
-    # sdogs = SafeDogs(n, test_func_info_, surrogate_, solver_, Nm, MESH, Ain, Bin)
-    # sdogs.sdogs_optimizer()
-    # while sdogs.iter < 40:
-    #     sdogs.surrogate_solver(sdogs)

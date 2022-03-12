@@ -46,7 +46,7 @@ options.set_option('Number of mesh refinement', 4)
 options.set_option('Initial sites', .5 * np.ones((n, 1)))
 options.set_option('Constant K', 3.0)
 options.set_option('Plot display', True)
-
+options.set_option('Optimization solver', 'snopt')
 
 Ain = np.concatenate((np.identity(n), -np.identity(n)), axis=0)
 Bin = np.concatenate((np.ones((n, 1)), np.zeros((n, 1))), axis=0)
@@ -66,7 +66,7 @@ for kk in range(sdogs.mesh_refine):
 
         # local minimizer
         sdogs.yp_min_ind = np.argmin(sdogs.yp)
-        sdogs.x_yp_min = sdogs.xE[:, sdogs.yp_min_ind].reshape(-1, 1)
+        sdogs.x_yp_min   = sdogs.xE[:, sdogs.yp_min_ind].reshape(-1, 1)
 
         # update the safe region and expansion set
         # note that expansion set depends both on mesh size and iterations
@@ -87,13 +87,11 @@ for kk in range(sdogs.mesh_refine):
         elif not sdogs.safe_init_refine:
 
             sdogs.iter_type = 4
-            print(f'Iteration number {sdogs.iter}')
-            break
             # expansion set empty, and not single safe point
             # exploitation stage: current evaluate point is the min surrogate model
             constant_snopt_min.triangulation_search_bound_snopt(sdogs)
             # TODO fix safe_mesh_quantizer
-            xc_eval = Utils.safe_mesh_quantizer(sdogs)
+            xc_eval = sdogs.safe_mesh_quantizer(sdogs)
 
         else:
             # safe mesh refinement invoked at the initial stage of optimization
@@ -119,7 +117,6 @@ for kk in range(sdogs.mesh_refine):
             sdogs.yS = np.hstack((sdogs.yS, sdogs.safe_eval(xc_eval)))
 
         plotting.summary_display(sdogs)
-    break
 
 # import imp
 # imp.reload(plotting)

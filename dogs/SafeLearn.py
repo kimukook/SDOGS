@@ -123,7 +123,7 @@ def grid_world(limits, num_points):
     num_points = np.broadcast_to(num_points[0], limits.shape[0]).astype(int)
     discrete_points = [np.linspace(low, up, n) for (low, up), n in zip(limits, num_points)]
     mesh = np.meshgrid(*discrete_points, indexing='ij')
-    points = np.row_stack([col.ravel() for col in mesh])
+    points = np.row_stack([row.ravel() for row in mesh])
     return points
 
 

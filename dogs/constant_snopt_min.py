@@ -1,37 +1,54 @@
+"""
+This is a script that implement the SNOPT optimization package to minimize nonlinear constrained optimization problem
+in SDOGS.
+
+References:
+    P. E. Gill, W. Murray, M. A. Saunders, Elizabeth Wong.
+    SNOPT 7.7 User's Manual.
+    CCoM Technical Report 18-1, Center for Computational Mathematics, University of California, San Diego.
+
+    P. E. Gill, W. Murray and M. A. Saunders.
+    SNOPT: An SQP algorithm for large-scale constrained optimization.
+    SIAM Review 47 (2005), 99-131.
+
+=====================================
+Author  :  Muhan Zhao
+Date    :  Mar. 12, 2022
+Location:  UC San Diego, La Jolla, CA
+=====================================
+
+MIT License
+
+Copyright (c) 2022 Muhan Zhao
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+"""
 import  os
 import  inspect
 import  numpy         as np
 import  scipy.io      as io
 from    dogs          import Utils
-from    dogs          import SafeLearn
-from    dogs          import plotting
 from    dogs          import interpolation
 from    dogs          import exterior_uncertainty
 from    optimize      import snopta, SNOPT_options
 
-'''
- constantK_snopt.py file contains functions used for DeltaDOGS(Lambda) algorithm.
- Using the package optimize (SNOPT) provided by Prof. Philip Gill and Dr. Elizabeth Wong, UCSD.
-
- This is a script of DeltaDOGS(Lambda) dealing with linear constraints problem which is solved using SNOPT. 
- Notice that this scripy inplements the snopta function. (Beginner friendly)
-
- The adaptive-K continuous search function has the form:
- Sc(x) = P(x) - K * e(x):
-
-     Sc(x):     constant-K continuous search function;
-     P(x):      Interpolation function: 
-                    For AlphaDOGS: regressionparameterization because the function evaluation contains noise;
-                    For DeltaDOGS: interpolationparameterization;
-     e(x):      The uncertainty function constructed based on Delaunay triangulation.
-
- Function contained:
-     tringulation_search_bound:   Search for the minimizer of continuous search function over all the Delaunay simplices 
-                                  over the entire domain.
-     Adoptive_K_search:           Search over a specific simplex.
-     AdaptiveK_search_cost:       Calculate the value of continuous search function.
-'''
-##################################  Constant K search SNOPT ###################################
+__all__ = ['triangulation_search_bound_snopt']
 
 
 def triangulation_search_bound_snopt(sdogs):
@@ -47,10 +64,10 @@ def triangulation_search_bound_snopt(sdogs):
     ----------
     Output
 
-    :return xc         :
-    :return yc         :
-    :return optm_result:
-    :return xc_safe_est:
+    :return xc         :    The minimizer of surrogate model
+    :return yc         :    The surrogate model value at the minimizer
+    :return optm_result:    The type optimization result, from global, safe or local
+    :return xc_safe_est:    The safe estimate at the minimizer
     """
     inf = 1e+20
 
@@ -102,20 +119,16 @@ def triangulation_search_bound_snopt(sdogs):
 
 
 def constant_search_snopt(simplex, sdogs):
-    '''
-    Find the minimizer of the search fucntion in a simplex using SNOPT package.
-    The function F is composed as:  1st        - objective
-                                    2nd to nth - simplex bounds
-                                    n+1 th ..  - safe constraints
+    """
+    Find the minimizer of the search function in a simplex using SNOPT package.
+
+    The function F is composed as:  1st                     - objective
+                                    2nd to nth              - simplex bounds
+                                    (n+1)th to (n+1+m)th    - safe constraints
+                                    (n+1+m+1)th to ...th    - nearest neighbor constraints
     :param simplex  :   Delaunay simplex of interest, n by n+1 matrix.
-    :param inter_par:   Interpolation info.
-    :param K        :   Tradeoff parameter.
-    :param y_safe   :   Safe function evaluation.
-    :param L_safe   :   Lipschitz constant of safety functions.
-    :param b        :   The parameters for exterior uncertainty function. It is determined once Delaunay-tri is fixed.
-    :param c        :   The parameters for exterior uncertainty function. It is determined once Delaunay-tri is fixed.
-    :return:            The minimizer of constant K continuous search function within the given Delaunay simplex.
-    '''
+    :param sdogs    :   SafeDogs class object
+    """
     inf = 1.0e+20
 
     # -------  ADD THE FOLLOWING LINE WHEN DEBUGGING --------

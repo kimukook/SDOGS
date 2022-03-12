@@ -99,8 +99,8 @@ class SdogsOptions(OptionsClass):
             'Adaptive surrogate': [False, False, bool],
             'Target value': [None, None, float],
 
-            'Scipy solver': [False, False, bool],
-            'Snopt solver': [False, False, bool],
+            # Temporarily, SDOGS rely on SNOPT to solve the nonlinear constrained minimization problem
+            'Optimization solver': [None, 'snopt', str],
 
             'Initial mesh size': [8, 8, int],
             'Number of mesh refinement': [8, 8, int],

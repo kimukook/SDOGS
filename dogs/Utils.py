@@ -526,68 +526,6 @@ def safe_eval_estimate(xE, y_safe, L_safe, x):
         return False
 
 
-def safe_mesh_quantizer(sdogs, xc):
-    # TODO move this function to the safedogs class
-    '''
-    Quantize the minimizer of surrogate model onto the current mesh grid.
-    The quantizer should be the closest and safe point to the minimizer on the mesh.
-    :param sdogs:   The optimization class
-    :param xc   :   The minimizer of surrogate model
-    :return:
-    '''
-    # Generate the mesh grid in 1D
-    MeshGrid = np.linspace(0, 1, sdogs.ms + 1)
-
-    xc_grid = np.empty(shape=[sdogs.n, 0])
-    turn = 0
-    dis = 1e+10
-    # Determine the unit rectangular on the current mesh grid that contains xc
-    while xc_grid.shape[1] == 0:
-        turn += 1
-        GridBound = {}
-        for i in range(sdogs.n):
-            # Quantify each coordinate of xc onto 1D grid
-            GridBound['{}'.format(i)] = MeshGrid[np.argsort(np.abs(MeshGrid - xc[i, :]))[:int(2*turn)]]
-        mesh_grid = SafeLearn.meshgrid_generator(GridBound, sdogs.n)
-
-        # query each point in mesh_grid, find the safe quantizer with the smallest surrogate surface value
-        for i in range(mesh_grid.shape[1]):
-            query = np.copy(mesh_grid[:, i].reshape(-1, 1))
-            safe_criteria = np.min(sdogs.yS, axis=0) - sdogs.L_safe * np.linalg.norm(sdogs.xE - query, axis=0)
-            if (safe_criteria > 0).any():
-                query_surrogate_value = sdogs.surrogate_eval(sdogs, query)
-                if query_surrogate_value < dis:
-                    dis = query_surrogate_value
-                    xc_grid = np.copy(query)
-                else:
-                    pass
-            else:
-                pass
-    return xc_grid
-
-
-# TODO I think we dont need add_sup anymore, we only need it when we combine xE and xU to keep track of the whole data set
-#   delete this func. when you feel comfortable
-def add_sup(sdogs):
-    '''
-    To avoid duplicate values in support points for Delaunay Triangulation.
-    :param xE: Evaluated points.
-    :param xU: Support points.
-    :param ind_min: The minimum point's index in xE.
-    return: Combination of unique elements of xE and xU and the index of the minimum yp.
-    '''
-    xmin = sdogs.xE[:, sdogs.ind_min]
-    # Construct the concatenate of xE and xU and return the array that every column (point) is unique
-    x_unique = np.copy(sdogs.xE)
-    for x in sdogs.xU.T:
-        dis, _, _ = mindis(x.reshape(-1, 1), x_unique)
-        if dis > 1e-5:
-            x_unique = np.hstack(( x_unique, x.reshape(-1, 1) ))
-    # Find the minimum point's index: ind_min
-    _, ind_min_new, _ = mindis(xmin.reshape(-1, 1), x_unique)
-    return x_unique, ind_min_new
-
-
 def unique_data(x):
     """
     Outline
